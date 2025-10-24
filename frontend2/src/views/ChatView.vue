@@ -21,14 +21,6 @@
           <p class="bot-status">User: {{ username }}</p>
           <p class="bot-status">Game: {{ gameNumber }} · Question: {{ userMessageCount }}/20</p>
         </div>
-        <div>
-          <button
-            class="border border-red-200 text-red-400 rounded-full px-10 py-2 hover:bg-red-100 hover:transition-all hover:duration-300 hover:shadow-md"
-            @click="logoutUser"
-          >
-            Logout
-          </button>
-        </div>
       </div>
     </Motion>
 

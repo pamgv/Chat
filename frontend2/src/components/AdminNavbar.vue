@@ -55,9 +55,9 @@
                 <i class="bi bi-trash"></i>
                 <span>Clear conversations</span>
             </button>
-            <button class="footer-btn">
-                <i class="bi bi-gear"></i>
-                <span>Settings</span>
+            <button class="footer-btn" @click="logout">
+                <i class="bi bi-box-arrow-right"></i>
+                <span>Logout</span>
             </button>
         </div>
     </div>
@@ -65,11 +65,18 @@
 
 <script setup>
 import { useRouter } from 'vue-router';
-
+import { useAuthStore } from '../store/auth';
 const router = useRouter();
+
+const authStore = useAuthStore();
 
 const closeRightPanel = () => {
     document.querySelector(".sidebar").classList.remove("isOpen");
     document.querySelector(".main-content").classList.remove("hide");
+};
+
+const logout = () => {
+    authStore.logout();
+    router.push('/login');
 };
 </script>
