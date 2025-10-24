@@ -32,16 +32,7 @@
                 <div class="conversation-icon">
                     <i class="bi bi-chat"></i>
                 </div>
-                <span class="conversation-text">What is the main topi...</span>
-                <button class="conversation-menu">
-                    <i class="bi bi-three-dots"></i>
-                </button>
-            </div>
-            <div class="conversation-item" @click="router.push('/chat')" :class="{ active: router.currentRoute.value.path === '/chat' }">
-                <div class="conversation-icon">
-                    <i class="bi bi-chat"></i>
-                </div>
-                <span class="conversation-text">Why is the sky blue?</span>
+                <span class="conversation-text">opcion en el menu de prueba</span>
                 <button class="conversation-menu">
                     <i class="bi bi-three-dots"></i>
                 </button>

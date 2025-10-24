@@ -7,6 +7,9 @@
           <i class="bi bi-pencil-square"></i>
           <h3>NMSU-TutoringBot-MeatScience</h3>
         </div>
+        <button class="menu-toggle-btn" @click="toggleSidebar">
+          <i class="bi bi-list"></i>
+        </button>
       </div>
     </Motion>
 
@@ -133,6 +136,18 @@ const messages = ref([]);
 const messageText = ref("");
 const isLoading = ref(false);
 const chatMessages = ref(null);
+
+/* --- Toggle sidebar --- */
+
+const toggleSidebar = () => {
+  const sidebar = document.querySelector(".sidebar");
+  const mainContent = document.querySelector(".main-content");
+
+  if (sidebar && mainContent) {
+    sidebar.classList.toggle("isOpen");
+    mainContent.classList.toggle("hide");
+  }
+};
 
 /* --- Scroll automático --- */
 const scrollToBottom = () => {
