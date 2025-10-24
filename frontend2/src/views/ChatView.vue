@@ -195,6 +195,9 @@ const loadUserData = async () => {
   }
 };
 
+
+
+
 /* --- Enviar mensaje --- */
 const sendMessage = async () => {
   if (!messageText.value.trim()) return;
@@ -264,7 +267,8 @@ const sendMessage = async () => {
     });
     scrollToBottom();
 
-    // Persistir progreso del juego
+    // ✅ Persistir progreso del juego actualizado (nuevo paso clave)
+    // esto sincroniza la BD con el número actual de pregunta real
     await axios.post("http://localhost:8000/user/update_game", {
       username: username.value,
       game_number: gameStore.gameNumber,
@@ -272,6 +276,7 @@ const sendMessage = async () => {
       correct_count: gameStore.score,
       highest_score: gameStore.highestScore,
     });
+
   } catch (error) {
     console.error(error);
     messages.value.push({
@@ -286,11 +291,24 @@ const sendMessage = async () => {
 };
 
 
+
 /* --- Inicialización --- */
 onMounted(async () => {
   authStore.initialize();
   username.value = authStore.user?.username || localStorage.getItem("username") || "guest";
   await loadUserData();
+});
+
+onMounted(() => {
+  window.addEventListener("load-conversation", (event) => {
+    const { gameNumber, messages: rawMessages } = event.detail;
+
+    gameStore.gameNumber = gameNumber;
+    messages.value = rawMessages.flatMap((m) => [
+      { sender: "user", text: m.user_message },
+      { sender: "bot", text: m.bot_response },
+    ]);
+  });
 });
 
 /* --- Logout --- */
