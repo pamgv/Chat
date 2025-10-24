@@ -1,82 +1,161 @@
 <template>
-    <div class="sidebar">
-        <button class="menu-section-hide" @click="closeRightPanel">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round" class="feather feather-x" viewBox="0 0 24 24">
-                <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-        </button>
+  <div class="sidebar">
+    <button class="menu-section-hide" @click="closeRightPanel">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" stroke="currentColor" stroke-width="2"
+        stroke-linecap="round" stroke-linejoin="round" class="feather feather-x" viewBox="0 0 24 24">
+        <path d="M18 6L6 18M6 6l12 12" />
+      </svg>
+    </button>
 
-        <!-- Header de la barra lateral -->
-        <div class="sidebar-header">
-            <button class="new-chat-btn justify-between" @click="router.push('/')">
-                <div class="flex items-center gap-2">
-                    <i class="bi bi-globe"></i>
-                    <span>New Chat</span>
-                </div>
-                <i class="bi bi-pencil-square"></i>
-            </button>
+    <!-- Header -->
+    <div class="sidebar-header">
+      <!--<button class="new-chat-btn justify-between" @click="startNewChat">
+        <div class="flex items-center gap-2">
+          <i class="bi bi-globe"></i>
+          <span>New Chat</span>
         </div>
-
-        <!-- Buscador -->
-        <div class="search-container">
-            <div class="search-input-wrapper">
-                <i class="bi bi-search"></i>
-                <input type="text" placeholder="Search" class="search-input" />
-            </div>
-        </div>
-
-        <!-- Lista de conversaciones -->
-        <div class="conversations-list">
-            <div class="conversation-item" @click="router.push('/chat')" :class="{ active: router.currentRoute.value.path === '/chat' }">
-                <div class="conversation-icon">
-                    <i class="bi bi-chat"></i>
-                </div>
-                <span class="conversation-text">opcion en el menu de prueba</span>
-                <button class="conversation-menu">
-                    <i class="bi bi-three-dots"></i>
-                </button>
-            </div>
-        </div>
-
-        <!-- Footer de la barra lateral -->
-        <div class="sidebar-footer">
-            <div class="flex gap-2 sm:flex-row flex-col">
-                <button class="footer-btn">
-                    <i class="bi bi-file-arrow-up"></i>
-                    <span>Export</span>
-                </button>
-                <button class="footer-btn">
-                    <i class="bi bi-file-arrow-down"></i>
-                    <span>Import</span>
-                </button>
-            </div>
-            <button class="footer-btn">
-                <i class="bi bi-trash"></i>
-                <span>Clear conversations</span>
-            </button>
-            <button class="footer-btn" @click="logout">
-                <i class="bi bi-box-arrow-right"></i>
-                <span>Logout</span>
-            </button>
-        </div>
+        <i class="bi bi-pencil-square"></i>
+      </button>-->
     </div>
+
+    <!-- Buscador 
+    <div class="search-container">
+      <div class="search-input-wrapper">
+        <i class="bi bi-search"></i>
+        <input v-model="searchQuery" type="text" placeholder="Search game..." class="search-input" />
+      </div>
+    </div>-->
+
+    <!-- Lista de juegos -->
+    <div class="conversations-list">
+      <div
+        v-for="game in filteredGames"
+        :key="game.game_number"
+        class="conversation-item"
+        :class="{ active: selectedGame === game.game_number }"
+        @click="selectGame(game.game_number)"
+      >
+        <div class="conversation-icon">
+          <i class="bi bi-chat"></i>
+        </div>
+        <div class="conversation-details">
+          <span class="conversation-text">
+            Game #{{ game.game_number }}
+          </span>
+          <span class="conversation-subtext">
+            Questions: {{ game.question_number }}/20 · {{ formatDate(game.created_at) }}
+          </span>
+        </div>
+        <button class="conversation-menu">
+          <i class="bi bi-three-dots"></i>
+        </button>
+      </div>
+
+      <div v-if="filteredGames.length === 0" class="no-games">
+        <p>No games found</p>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="sidebar-footer">
+      <div class="flex gap-2 sm:flex-row flex-col">
+        <!--<button class="footer-btn">
+          <i class="bi bi-file-arrow-up"></i>
+          <span>Export</span>
+        </button>
+        <button class="footer-btn">
+          <i class="bi bi-file-arrow-down"></i>
+          <span>Import</span>
+        </button> -->
+      </div>
+      <!--<button class="footer-btn">
+        <i class="bi bi-trash"></i>
+        <span>Clear conversations</span>
+      </button>-->
+      <button class="footer-btn" @click="logout">
+        <i class="bi bi-box-arrow-right"></i>
+        <span>Logout</span>
+      </button>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { useRouter } from 'vue-router';
-import { useAuthStore } from '../store/auth';
-const router = useRouter();
+import { ref, computed, onMounted } from "vue";
+import axios from "axios";
+import { useRouter } from "vue-router";
+import { useAuthStore } from "../store/auth";
 
+const router = useRouter();
 const authStore = useAuthStore();
 
-const closeRightPanel = () => {
-    document.querySelector(".sidebar").classList.remove("isOpen");
-    document.querySelector(".main-content").classList.remove("hide");
+const username = ref(localStorage.getItem("username") || "guest");
+const games = ref([]);
+const selectedGame = ref(null);
+const searchQuery = ref("");
+
+// 🔹 Cargar juegos del usuario
+const loadGames = async () => {
+  try {
+    const { data } = await axios.get(`http://localhost:8000/user/get_stats/${username.value}`);
+    // Orden descendente: últimos juegos primero
+    games.value = (data.games || []).sort((a, b) => b.game_number - a.game_number);
+  } catch (err) {
+    console.error("Error loading games:", err);
+  }
 };
 
-const logout = () => {
-    authStore.logout();
-    router.push('/login');
+// 🔹 Filtro por búsqueda
+const filteredGames = computed(() =>
+  games.value.filter((g) =>
+    g.game_number.toString().includes(searchQuery.value.trim())
+  )
+);
+
+// 🔹 Formato de fecha
+const formatDate = (iso) => {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString();
 };
+
+// 🔹 Al seleccionar un juego, cargar mensajes
+const selectGame = async (gameNumber) => {
+  selectedGame.value = gameNumber;
+  try {
+    const { data } = await axios.get(
+      `http://localhost:8000/user/get_game_messages/${username.value}/${gameNumber}`
+    );
+
+    // Emitimos un evento global para ChatView
+    const event = new CustomEvent("load-conversation", {
+      detail: {
+        gameNumber,
+        messages: data.messages,
+      },
+    });
+    window.dispatchEvent(event);
+  } catch (err) {
+    console.error("Error loading messages:", err);
+  }
+};
+
+// 🔹 Nuevo chat
+const startNewChat = () => {
+  router.push("/chat");
+};
+
+// 🔹 Logout
+const logout = () => {
+  authStore.logout();
+  router.push("/login");
+};
+
+// 🔹 Cerrar panel lateral
+const closeRightPanel = () => {
+  document.querySelector(".sidebar")?.classList.remove("isOpen");
+  document.querySelector(".main-content")?.classList.remove("hide");
+};
+
+// 🔹 Montar
+onMounted(loadGames);
 </script>
