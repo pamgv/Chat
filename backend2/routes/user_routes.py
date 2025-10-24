@@ -312,3 +312,19 @@ def get_game_messages(username: str, game_number: int):
     except Exception as e:
         print(f"Error in get_game_messages: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+
+@router.delete("/delete_all_messages/{username}")
+def delete_all_messages(username: str):
+    """Elimina todas las conversaciones (mensajes) y juegos de un usuario."""
+    user = get_user(username)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_id = str(user["_id"])
+
+    messages_col.delete_many({"user_id": user_id})
+    games_col.delete_many({"user_id": user["_id"]})
+
+    users_col.update_one({"_id": user["_id"]}, {"$set": {"stats.total_games": 0, "stats.total_correct": 0}})
+
+    return {"message": f"All conversations deleted for {username}"}
