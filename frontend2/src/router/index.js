@@ -84,7 +84,7 @@ router.beforeEach((to, from, next) => {
   if (requiresAuth && !authStore.isLoggedIn) {
     next('/login');
   } else if (requiresGuest && authStore.isLoggedIn) {
-    next('/admin/chat');
+    next('/chat');
   } else {
     next();
   }
