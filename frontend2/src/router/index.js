@@ -13,14 +13,18 @@ import RegisterView from "../views/Auth/RegisterView.vue";
 
 
 const routes = [
+  // 👉 El dominio raíz manda a /auth/login
+  { path: "/", redirect: "/login" },
+
+  // Área privada
   {
-    path: "/",
+    path: "/admin",
     name: "AdminLayout",
     component: AdminLayout,
     meta: { requiresAuth: true },
     children: [
       {
-        path: "",
+        path: "/inicio",
         name: "Inicio",
         component: InicioView,
         meta: {
@@ -80,7 +84,7 @@ router.beforeEach((to, from, next) => {
   if (requiresAuth && !authStore.isLoggedIn) {
     next('/login');
   } else if (requiresGuest && authStore.isLoggedIn) {
-    next('/');
+    next('/admin/chat');
   } else {
     next();
   }
