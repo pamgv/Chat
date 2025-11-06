@@ -7,6 +7,7 @@ import bcrypt
 from openai import OpenAI  
 import os
 from dotenv import load_dotenv
+from fastapi import Body
 
 load_dotenv()
 
@@ -194,6 +195,55 @@ def update_game(data: GameUpdate):
         )
 
     return {"message": "Game progress updated successfully!"}
+
+# ---------------------------
+# Guardar resultado de quiz
+# ---------------------------
+@router.post("/save_quiz_result")
+def save_quiz_result(
+    username: str = Body(...),
+    game_number: int = Body(...),
+    question_number: int = Body(...),
+    is_correct: bool = Body(...),
+):
+    user = get_user(username)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user_id = ObjectId(user["_id"])
+
+    # Actualizar registro del juego
+    game = games_col.find_one({"user_id": user_id, "game_number": game_number})
+    if not game:
+        games_col.insert_one({
+            "user_id": user_id,
+            "game_number": game_number,
+            "question_number": question_number,
+            "correct_count": 1 if is_correct else 0,
+            "created_at": datetime.utcnow()
+        })
+    else:
+        # Si ya existe, incrementar si fue correcta
+        update_data = {
+            "question_number": question_number
+        }
+        if is_correct:
+            update_data["$inc"] = {"correct_count": 1}
+        else:
+            update_data["$inc"] = {"correct_count": 0}
+
+        games_col.update_one(
+            {"user_id": user_id, "game_number": game_number},
+            {"$set": {"question_number": question_number}, "$inc": {"correct_count": 1 if is_correct else 0}}
+        )
+
+    # Actualizar total_correct del usuario
+    users_col.update_one(
+        {"_id": user["_id"]},
+        {"$inc": {"stats.total_correct": 1 if is_correct else 0}}
+    )
+
+    return {"message": "Quiz result saved successfully", "is_correct": is_correct}
 
 # Función auxiliar para serializar cualquier ObjectId → str
 def serialize_doc(doc):
