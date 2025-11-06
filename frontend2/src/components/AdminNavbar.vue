@@ -81,7 +81,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import axios from "axios";
 import { useRouter } from "vue-router";
 import { useAuthStore } from "../store/auth";
@@ -121,28 +121,34 @@ const formatDate = (iso) => {
 // 🔹 Al seleccionar un juego, cargar mensajes
 const selectGame = async (gameNumber) => {
   selectedGame.value = gameNumber;
+
   try {
+    // 1️⃣ Traer mensajes del juego seleccionado
     const { data } = await axios.get(
       `http://localhost:8000/user/get_game_messages/${username.value}/${gameNumber}`
     );
 
-    // Emitimos un evento global para ChatView
+    // 2️⃣ Buscar el juego correspondiente (para sus stats)
+    const gameData = games.value.find(g => g.game_number === gameNumber);
+
+    // 3️⃣ Emitir evento global con mensajes y stats
     const event = new CustomEvent("load-conversation", {
       detail: {
         gameNumber,
         messages: data.messages,
+        stats: {
+          question_number: gameData?.question_number || 0,
+          correct_count: gameData?.correct_count || 0,
+        },
       },
     });
     window.dispatchEvent(event);
+
   } catch (err) {
     console.error("Error loading messages:", err);
   }
 };
 
-// 🔹 Nuevo chat
-const startNewChat = () => {
-  router.push("/chat");
-};
 
 // 🔹 Logout
 const logout = () => {
@@ -156,6 +162,27 @@ const closeRightPanel = () => {
   document.querySelector(".main-content")?.classList.remove("hide");
 };
 
-// 🔹 Montar
-onMounted(loadGames);
+// 🔹 Escuchar cuando se cree un nuevo juego desde el chat
+const handleGamesUpdated = async (event) => {
+  if (event.detail.username === username.value) {
+    console.log("♻️ Refrescando lista de juegos...");
+    await loadGames();
+
+    // 👇 Opcional: selecciona automáticamente el nuevo juego
+    if (games.value.length > 0) {
+      selectedGame.value = games.value[0].game_number;
+    }
+  }
+};
+
+// 🔹 Montar y desmontar listeners
+onMounted(() => {
+  loadGames();
+  window.addEventListener("games-updated", handleGamesUpdated);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("games-updated", handleGamesUpdated);
+});
 </script>
+
