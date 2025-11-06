@@ -19,28 +19,26 @@
         <div>
           <h2>IntelligentTutor-MeatScience</h2>
           <p class="bot-status">User: {{ username }}</p>
-          <p class="bot-status">Game: {{ gameNumber }} · Question: {{ userMessageCount }}/20</p>
+          <p class="bot-status">Game: {{ gameNumber }} · Question: {{ userMessageCount }}/20 · Score: {{ gameStore.score }}
+</p>
+
         </div>
       </div>
     </Motion>
 
     <!-- Messages -->
     <div ref="chatMessages" class="chat-messages" v-if="messages.length > 0 || isLoading">
-      <!-- Conversation -->
       <Motion
         v-for="(message, index) in messages"
         :key="index"
         :initial="{ opacity: 0, y: 20, scale: 0.95 }"
         :animate="{ opacity: 1, y: 0, scale: 1 }"
-        :transition="{ duration: 0.5, delay: 0.0 * index, type: 'spring', stiffness: 200, damping: 20 }"
+        :transition="{ duration: 0.5, type: 'spring', stiffness: 200, damping: 20 }"
       >
         <div class="message-container" :class="message.sender">
           <div class="message-bubble" :class="message.sender">
-            <!-- Avatar -->
             <div v-if="message.sender === 'user'" class="user-avatar"><i class="bi bi-person"></i></div>
             <div v-else class="bot-avatar"><div class="bot-logo"><span class="bot-logo-text">NMSU</span></div></div>
-
-            <!-- Message -->
             <div class="message-content">
               <div class="message-header">
                 <span class="sender-name">{{ message.sender === "user" ? "You" : "NMSU" }}</span>
@@ -51,7 +49,28 @@
         </div>
       </Motion>
 
-      <!-- Typing Indicator (bubble completo del bot) -->
+      <!-- QUIZ card -->
+      <Motion
+        v-if="showQuiz"
+        :initial="{ opacity: 0, y: 20 }"
+        :animate="{ opacity: 1, y: 0 }"
+        :transition="{ duration: 0.5 }"
+      >
+        <div class="quiz-box">
+          <h3>{{ quizQuestion }}</h3>
+          <div v-if="!quizAnswered">
+            <div v-for="option in quizOptions" :key="option">
+              <button @click="selectAnswer(option)">{{ option }}</button>
+            </div>
+          </div>
+          <div v-else class="quiz-result" :class="{ correct: isAnswerCorrect, incorrect: !isAnswerCorrect }">
+            <p v-if="isAnswerCorrect">✅ Correct! Great job!</p>
+            <p v-else>❌ Incorrect. The correct answer was: <strong>{{ correctAnswer }}</strong></p>
+          </div>
+        </div>
+      </Motion>
+
+      <!-- Typing indicator -->
       <Motion
         v-if="isLoading"
         :initial="{ opacity: 0, y: 20, scale: 0.9 }"
@@ -128,20 +147,25 @@ const messages = ref([]);
 const messageText = ref("");
 const isLoading = ref(false);
 const chatMessages = ref(null);
+const hasPersistedCurrentGame = ref(false);
 
-/* --- Toggle sidebar --- */
+// Quiz
+const showQuiz = ref(false);
+const quizQuestion = ref("");
+const quizOptions = ref([]);
+const correctAnswer = ref("");
+const quizAnswered = ref(false);
+const isAnswerCorrect = ref(false);
 
 const toggleSidebar = () => {
   const sidebar = document.querySelector(".sidebar");
   const mainContent = document.querySelector(".main-content");
-
   if (sidebar && mainContent) {
     sidebar.classList.toggle("isOpen");
     mainContent.classList.toggle("hide");
   }
 };
 
-/* --- Scroll automático --- */
 const scrollToBottom = () => {
   nextTick(() => {
     if (chatMessages.value) {
@@ -149,126 +173,155 @@ const scrollToBottom = () => {
     }
   });
 };
-watch([messages, isLoading], () => setTimeout(scrollToBottom, 300), { deep: true });
+watch([messages, isLoading, showQuiz], () => setTimeout(scrollToBottom, 300), { deep: true });
 
-/* --- Cargar o crear nuevo juego para el usuario actual --- */
 const loadUserData = async () => {
   if (!username.value) return;
-
   try {
     const { data } = await axios.get(`http://localhost:8000/user/get_stats/${username.value}`);
-
-    // Buscar el último juego de ESTE usuario
     let newGameNumber = 1;
     if (data.games && data.games.length > 0) {
       const lastGame = data.games[data.games.length - 1];
-      newGameNumber = lastGame.game_number + 1; // sumamos 1 al último
+      newGameNumber = lastGame.game_number + 1;
     }
-
-    // Reiniciar progreso y asignar nuevo juego
     gameStore.gameNumber = newGameNumber;
     gameStore.userMessageCount = 0;
     gameStore.score = 0;
     gameStore.highestScore = data.best_score || 0;
+    hasPersistedCurrentGame.value = false;
 
-    // Guardar el nuevo juego en la BD (ligado al usuario actual)
-    await axios.post("http://localhost:8000/user/update_game", {
-      username: username.value,
-      game_number: gameStore.gameNumber,
-      question_number: 0,
-      correct_count: 0,
-      highest_score: gameStore.highestScore,
-    });
-
-    // Mostrar mensaje inicial
     messages.value = [
-      {
-        id: Date.now(),
-        text: `🎮 Welcome back, ${username.value}! Starting new Game #${gameStore.gameNumber}.`,
-        sender: "bot",
-      },
+      { id: Date.now(), text: `🎮 Welcome back, ${username.value}! Starting new Game #${gameStore.gameNumber}.`, sender: "bot" },
     ];
-
-    scrollToBottom();
   } catch (error) {
     console.error("Error loading user data:", error);
   }
 };
 
-
-
-
-/* --- Enviar mensaje --- */
 const sendMessage = async () => {
-  if (!messageText.value.trim()) return;
+  if (!messageText.value.trim() || showQuiz.value) return;
 
   const text = messageText.value.trim();
   messageText.value = "";
-
-  // Mostrar de inmediato el mensaje del usuario
   messages.value.push({ id: Date.now(), text, sender: "user" });
   scrollToBottom();
   isLoading.value = true;
 
-  // 1) Calcula el siguiente número de pregunta SIN mutar todavía
   const nextCount = gameStore.userMessageCount + 1;
+ if (nextCount > 20) {
+  // 🆕 Incrementa juego
+  gameStore.gameNumber++;
+  gameStore.userMessageCount = 0;
+  hasPersistedCurrentGame.value = false;
 
-  // 2) Si supera 20, inicia juego nuevo y NO guardes este mensaje
-  if (nextCount > 20) {
-    gameStore.gameNumber++;
-    gameStore.userMessageCount = 0; // ← clave: reseteamos para que la próxima sea #1
+  // 💾 Crear nuevo juego en DB
+  await axios.post("http://localhost:8000/user/update_game", {
+    username: username.value,
+    game_number: gameStore.gameNumber,
+    question_number: 1,
+    correct_count: 0,
+    highest_score: gameStore.highestScore,
+  });
 
-    // limpiar pantalla y anunciar nuevo juego
-    messages.value = [
-      { id: Date.now(), text: `🎮 New Game #${gameStore.gameNumber} started!`, sender: "bot" },
-    ];
+  // 🧩 Refresca datos del usuario y lista de juegos sin recargar
+  await loadUserData();
 
-    // crear registro del nuevo juego en BD con question_number=0
-    try {
-      await axios.post("http://localhost:8000/user/update_game", {
-        username: username.value,
-        game_number: gameStore.gameNumber,
-        question_number: 0,
-        correct_count: 0,
-        highest_score: gameStore.highestScore,
-      });
-    } catch (e) {
-      console.error(e);
-      messages.value.push({
-        id: Date.now() + 2,
-        text: "⚠️ Error creating new game in DB.",
-        sender: "bot",
-      });
-    } finally {
-      isLoading.value = false;
-      scrollToBottom();
-    }
-    return; // ← muy importante
-  }
+  // 🔊 Notifica globalmente (para sidebar u otros componentes)
+  window.dispatchEvent(new CustomEvent("games-updated", { detail: { username: username.value } }));
 
-  // 3) No hay rollover: ahora sí confirmamos el incremento y guardamos
+  // 🪄 Reinicia mensajes visuales
+  messages.value = [
+    { id: Date.now(), text: `🎮 Game #${gameStore.gameNumber} started!`, sender: "bot" },
+  ];
+  isLoading.value = false;
+  return;
+}
+
+
+  const isFirstOfThisGame = gameStore.userMessageCount === 0;
   gameStore.userMessageCount = nextCount;
 
   try {
+    if (isFirstOfThisGame && !hasPersistedCurrentGame.value) {
+      await axios.post("http://localhost:8000/user/update_game", {
+        username: username.value,
+        game_number: gameStore.gameNumber,
+        question_number: 1,
+        correct_count: gameStore.score,
+        highest_score: gameStore.highestScore,
+      });
+      hasPersistedCurrentGame.value = true;
+    }
+
     const { data } = await axios.post("http://localhost:8000/user/save_message", {
       username: username.value,
       text,
       game_number: gameStore.gameNumber,
-      question_number: gameStore.userMessageCount, // será 1 en la primera del juego nuevo
+      question_number: gameStore.userMessageCount,
     });
 
-    // animación de tipeo
-    await new Promise((r) => setTimeout(r, 1000));
+    messages.value.push({ id: Date.now() + 1, text: data.bot_response, sender: "bot" });
 
-    messages.value.push({
-      id: Date.now() + 1,
-      text: data.bot_response,
-      sender: "bot",
-    });
+    // 🧠 Generar quiz en 5, 10, 15, 20
+    if (nextCount % 5 === 0) {
+      await nextTick();
+      const context = messages.value.slice(-5).map(m => `${m.sender}: ${m.text}`).join("\n");
+      try {
+        const quizData = await axios.post("http://localhost:8000/chatbot/generate_quiz", {
+          username: username.value,
+          context,
+        });
+
+        const q = quizData?.data;
+        if (!q || !q.question || !q.options?.length) {
+          console.warn("⚠️ API devolvió respuesta vacía, usando fallback.");
+          quizQuestion.value = "What is the main component of meat?";
+          quizOptions.value = ["Protein", "Carbohydrates", "Lipids", "Vitamins"];
+          correctAnswer.value = "Protein";
+        } else {
+          quizQuestion.value = q.question;
+          quizOptions.value = q.options;
+          correctAnswer.value = q.correct_answer;
+        }
+
+        quizAnswered.value = false;
+        showQuiz.value = true;
+        console.log("✅ Quiz card activado:", quizQuestion.value);
+      } catch (err) {
+        console.error("Error generating quiz:", err);
+        quizQuestion.value = "What is the main component of meat?";
+        quizOptions.value = ["Protein", "Carbohydrates", "Lipids", "Vitamins"];
+        correctAnswer.value = "Protein";
+        quizAnswered.value = false;
+        showQuiz.value = true;
+      }
+    }
+  } catch (error) {
+    console.error(error);
+    messages.value.push({ id: Date.now() + 2, text: "Error contacting API or DB.", sender: "bot" });
+  } finally {
+    isLoading.value = false;
     scrollToBottom();
+  }
+}; // ✅ cierre añadido
 
-    // ✅ Persistir progreso del juego actualizado (nuevo paso clave)
-    // esto sincroniza la BD con el número actual de pregunta real
+const selectAnswer = async (option) => {
+  quizAnswered.value = true;
+  isAnswerCorrect.value = option === correctAnswer.value;
+
+  // 🧩 Actualizar score local
+  if (isAnswerCorrect.value) gameStore.score++;
+
+  // 🧠 Guardar resultado en la base de datos
+  try {
+    await axios.post("http://localhost:8000/user/save_quiz_result", {
+      username: username.value,
+      game_number: gameStore.gameNumber,
+      question_number: gameStore.userMessageCount,
+      is_correct: isAnswerCorrect.value,
+    });
+
+    // También actualizar progreso general del juego
     await axios.post("http://localhost:8000/user/update_game", {
       username: username.value,
       game_number: gameStore.gameNumber,
@@ -277,22 +330,19 @@ const sendMessage = async () => {
       highest_score: gameStore.highestScore,
     });
 
-  } catch (error) {
-    console.error(error);
-    messages.value.push({
-      id: Date.now() + 2,
-      text: "Error contacting API or DB.",
-      sender: "bot",
-    });
-  } finally {
-    isLoading.value = false;
-    scrollToBottom();
+    console.log("✅ Quiz result saved and game updated");
+  } catch (err) {
+    console.error("Error saving quiz result:", err);
   }
+
+  // Cerrar card tras 2.5s
+  setTimeout(() => {
+    showQuiz.value = false;
+  }, 2500);
+  scrollToBottom();
 };
 
 
-
-/* --- Inicialización --- */
 onMounted(async () => {
   authStore.initialize();
   username.value = authStore.user?.username || localStorage.getItem("username") || "guest";
@@ -301,45 +351,58 @@ onMounted(async () => {
 
 onMounted(() => {
   window.addEventListener("load-conversation", (event) => {
-    const { gameNumber, messages: rawMessages } = event.detail;
+    const { gameNumber, messages: rawMessages, stats } = event.detail;
 
+    // 🧩 Actualizar gameStore con el progreso real
     gameStore.gameNumber = gameNumber;
+    gameStore.userMessageCount = stats?.question_number || 0;
+    gameStore.score = stats?.correct_count || 0;
+
+    // 🔁 Mostrar mensajes en el chat
     messages.value = rawMessages.flatMap((m) => [
       { sender: "user", text: m.user_message },
       { sender: "bot", text: m.bot_response },
     ]);
+
+    console.log(
+      `📚 Loaded Game #${gameNumber}: ${gameStore.userMessageCount} questions, ${gameStore.score} correct`
+    );
   });
 });
 
-/* --- Logout --- */
-const logoutUser = () => {
-  authStore.logout();
-  router.push("/login");
-};
 </script>
-
 
 <style scoped src="../styles/chat.css"></style>
 <style scoped src="../styles/chatMessages.css"></style>
 <style scoped src="../styles/animation.css"></style>
 
 <style scoped>
-.typing-indicator {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-top: 8px;
+.quiz-box {
+  background-color: #f8f8f8;
+  color: #111;
+  padding: 15px;
+  border-radius: 10px;
+  margin: 10px 70px 0 70px;
+  border: 1px solid #ddd;
+  text-align: center;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
 }
-.typing-dot {
-  width: 8px;
-  height: 8px;
+.quiz-box h3 {
+  margin-bottom: 10px;
+  color: #000;
+  font-weight: 600;
+}
+.quiz-box button {
+  margin: 5px;
   background-color: #8b1538;
-  border-radius: 50%;
-  margin: 0 2px;
-  animation: blink 1.2s infinite ease-in-out both;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
 }
-@keyframes blink {
-  0%, 80%, 100% { opacity: 0; }
-  40% { opacity: 1; }
-}
+.quiz-box button:hover { background-color: #a91b47; }
+.quiz-result.correct p { color: green; font-weight: 600; }
+.quiz-result.incorrect p { color: #b91c1c; font-weight: 600; }
 </style>
